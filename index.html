@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>음성 뉴스 스크랩 — 접근성 프로토타입</title>
+<meta name="description" content="시력이 저하된 사용자를 위한 음성 기반 뉴스 스크랩 인터페이스 프로토타입" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<a href="#main" class="skip-link">본문으로 건너뛰기</a>
+
+<!-- 진입 화면: 화면 전체가 시작 영역 -->
+<div id="entry-screen" role="button" tabindex="0"
+     aria-label="음성 뉴스 스크랩을 시작하려면 화면 아무 곳이나 누르거나 아무 키나 누르세요.">
+  <div class="entry-inner">
+    <div class="entry-icon" aria-hidden="true">🎙</div>
+    <h1 class="entry-title">음성 뉴스 스크랩</h1>
+    <p class="entry-guide" id="entry-guide">
+      화면 아무 곳이나 누르거나, 키보드의 아무 키나 누르면 시작합니다.
+    </p>
+    <p class="entry-sub">시작한 뒤에는 음성이 빠르게 느껴질 때 화면을 누르면 멈출 수 있습니다.</p>
+    <p class="entry-sub">시력이 저하된 정보 수집 담당자를 위한 음성 우선 서비스</p>
+  </div>
+</div>
+
+<header class="site-header">
+  <div class="wrap">
+    <h1>음성 뉴스 스크랩</h1>
+    <p class="tagline">시력이 저하된 정보 수집 담당자를 위한 음성 우선 인터페이스 프로토타입</p>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+
+  <!-- 음성 설정 -->
+  <section class="panel" aria-labelledby="settings-h">
+    <h2 id="settings-h"><span class="ico" aria-hidden="true">⚙</span> 음성 설정</h2>
+    <div class="settings-grid">
+      <div class="field">
+        <label for="tts-toggle">음성 출력</label>
+        <button id="tts-toggle" class="toggle" role="switch" aria-checked="true">켜짐</button>
+      </div>
+      <div class="field">
+        <label for="rate">말하기 속도 <output id="rate-out">0.8x</output></label>
+        <input type="range" id="rate" min="0.6" max="2.0" step="0.1" value="0.8" />
+      </div>
+      <div class="field">
+        <label for="voice-select">목소리</label>
+        <select id="voice-select"><option>불러오는 중…</option></select>
+      </div>
+    </div>
+    <p id="tts-warning" class="warning" hidden>이 브라우저는 한국어 음성 합성을 지원하지 않을 수 있어요. 텍스트 안내는 계속 표시됩니다.</p>
+  </section>
+
+  <!-- 1단계: 음성 질문 -->
+  <section class="panel" aria-labelledby="ask-h">
+    <h2 id="ask-h"><span class="ico" aria-hidden="true">🎙</span> 1. 음성으로 질문하기</h2>
+    <p class="hint">마이크 버튼을 누르면 음성으로 질문할 수 있습니다. 처음 사용할 때는 브라우저가 마이크 권한을 물어보며, 그 과정을 음성으로 안내합니다.</p>
+    <button id="mic-btn" class="primary-btn">
+      <span class="ico" aria-hidden="true">🎙</span> <span id="mic-label">마이크 켜고 질문하기</span>
+    </button>
+    <p id="recognized-q" class="recognized" hidden></p>
+    <div class="fallback">
+      <p class="hint">음성 입력이 어려운 경우, 아래 예시 질문으로 진행할 수 있습니다.</p>
+      <button id="ask-btn" class="secondary-btn">
+        <span class="ico" aria-hidden="true">📝</span> 예시 질문으로 진행하기
+      </button>
+      <p class="example-q">예시 질문: &ldquo;이번 주 한국은행 기준금리 관련 기사 찾아줘&rdquo;</p>
+    </div>
+  </section>
+
+  <!-- 2단계: 진행 단계 음성 안내 -->
+  <section class="panel" id="progress-panel" aria-labelledby="progress-h" hidden>
+    <h2 id="progress-h"><span class="ico" aria-hidden="true">📢</span> 2. 진행 단계 안내</h2>
+    <ol id="steps" class="steps"></ol>
+  </section>
+
+  <!-- 음성 출력 라이브 리전 -->
+  <div id="readout" class="readout" role="status" aria-live="assertive">
+    <span class="ico" aria-hidden="true">🎧</span>
+    <span id="readout-text">위 버튼을 눌러 음성 질문 흐름을 시작해보세요.</span>
+  </div>
+  <p id="timing" class="timing" aria-live="polite"></p>
+
+  <!-- 3단계: 기사 목록 (3계층 + 요약 먼저 읽기) -->
+  <section class="panel" id="results-panel" aria-labelledby="results-h" hidden>
+    <h2 id="results-h"><span class="ico" aria-hidden="true">📰</span> 3. 검색된 기사</h2>
+    <div class="keyhelp" aria-hidden="true">
+      <span><kbd>↑</kbd><kbd>↓</kbd> 기사 이동</span>
+      <span><kbd>→</kbd> 더 자세히</span>
+      <span><kbd>←</kbd> 접기</span>
+      <span><kbd>S</kbd> 스크랩</span>
+      <span><kbd>R</kbd> 다시 듣기</span>
+    </div>
+    <ul id="article-list" class="article-list" role="listbox"
+        aria-label="검색된 기사 목록. 위아래 화살표로 이동, 오른쪽 화살표로 펼치기." tabindex="0"></ul>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>접근성 프로토타입 · 진행 단계 음성 안내 + 완료 신호 + 3계층 점진적 공개 + 요약 먼저 읽기</p>
+  </div>
+</footer>
+
+<script src="voice-input.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
