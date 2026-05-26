@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>보이스 어시스턴트 — 3계층 점진적 공개 시뮬레이션</title>
+<style>
+  :root {
+    --bg: #f4f2ec;
+    --sidebar: #2a2722;
+    --sidebar-ink: #e8e4d8;
+    --sidebar-ink-dim: #9a948a;
+    --sidebar-active: #3d3932;
+    --canvas: #fbfaf6;
+    --ink: #211f1b;
+    --ink-2: #565249;
+    --ink-3: #8a857a;
+    --border: #ddd9cd;
+    --accent: #b5502a;
+    --accent-soft: #f2e2d8;
+    --user-bubble: #2a2722;
+    --ai-bubble: #ffffff;
+    --done: #2f6b46;
+    --done-soft: #e0efe5;
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: "Iowan Old Style", "Palatino Linotype", "Noto Serif KR", Georgia, serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ===== 왼쪽 사이드바 ===== */
+  .sidebar {
+    width: 268px;
+    flex-shrink: 0;
+    background: var(--sidebar);
+    color: var(--sidebar-ink);
+    display: flex;
+    flex-direction: column;
+    padding: 1.1rem 0;
+  }
+
+  .brand {
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.3rem 1.2rem 1.1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .brand-mark {
+    width: 30px; height: 30px; border-radius: 9px;
+    background: var(--accent); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+  }
+  .brand-name {
+    font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em;
+    font-family: ui-sans-serif, system-ui, "Noto Sans KR", sans-serif;
+  }
+
+  .new-chat {
+    margin: 1rem 1.2rem 0.5rem;
+    padding: 0.6rem 0.9rem;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    color: var(--sidebar-ink);
+    font: inherit; font-size: 0.88rem;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    cursor: pointer; text-align: left;
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  .new-chat:hover { background: rgba(255,255,255,0.12); }
+
+  .section-label {
+    font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--sidebar-ink-dim);
+    padding: 1.1rem 1.3rem 0.4rem;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .nav-item, .chat-item {
+    padding: 0.5rem 1.3rem;
+    font-size: 0.86rem;
+    color: var(--sidebar-ink);
+    cursor: pointer;
+    font-family: ui-sans-serif, system-ui, "Noto Sans KR", sans-serif;
+    display: flex; align-items: center; gap: 0.55rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .nav-item:hover, .chat-item:hover { background: rgba(255,255,255,0.06); }
+  .chat-item.active { background: var(--sidebar-active); }
+  .chat-item .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent); flex-shrink: 0;
+  }
+  .nav-item .ic { opacity: 0.7; font-size: 0.95rem; }
+
+  .sidebar-foot {
+    margin-top: auto;
+    padding: 0.9rem 1.3rem 0.2rem;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    font-size: 0.78rem; color: var(--sidebar-ink-dim);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+
+  /* ===== 오른쪽 대화 영역 ===== */
+  .main {
+    flex: 1;
+    display: flex; flex-direction: column;
+    background: var(--canvas);
+    min-width: 0;
+  }
+
+  .main-header {
+    padding: 0.9rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--canvas);
+  }
+  .main-title {
+    font-size: 0.98rem; font-weight: 600;
+    font-family: ui-sans-serif, system-ui, "Noto Sans KR", sans-serif;
+  }
+  .main-sub {
+    font-size: 0.78rem; color: var(--ink-3);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+  .voice-badge {
+    display: flex; align-items: center; gap: 0.4rem;
+    font-size: 0.76rem; color: var(--accent);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    background: var(--accent-soft);
+    padding: 0.3rem 0.7rem; border-radius: 20px;
+  }
+  .voice-badge .pulse {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+  }
+  .voice-badge.speaking .pulse { animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.25; transform: scale(1.5); } }
+
+  /* 대화 스크롤 영역 */
+  .conversation {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.6rem 1.5rem 1rem;
+  }
+  .conversation-inner { max-width: 660px; margin: 0 auto; }
+
+  .msg { margin-bottom: 1.4rem; display: flex; gap: 0.7rem; }
+  .msg.user { flex-direction: row-reverse; }
+
+  .avatar {
+    width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+  .avatar.ai { background: var(--accent); color: #fff; }
+  .avatar.user { background: var(--user-bubble); color: #fff; }
+
+  .bubble {
+    padding: 0.8rem 1rem;
+    border-radius: var(--radius);
+    font-size: 0.96rem;
+    line-height: 1.62;
+    max-width: 80%;
+  }
+  .msg.ai .bubble {
+    background: var(--ai-bubble);
+    border: 1px solid var(--border);
+    border-top-left-radius: 4px;
+  }
+  .msg.user .bubble {
+    background: var(--user-bubble);
+    color: #fff;
+    border-top-right-radius: 4px;
+    font-family: ui-sans-serif, system-ui, "Noto Sans KR", sans-serif;
+    font-size: 0.92rem;
+  }
+
+  /* 3계층 카드 */
+  .layer-label {
+    display: inline-block;
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    padding: 0.12rem 0.5rem; border-radius: 5px;
+    margin-bottom: 0.45rem;
+  }
+  .layer-label.headline { background: var(--accent-soft); color: var(--accent); }
+  .layer-label.summary  { background: #e7eef5; color: #2f5b8a; }
+  .layer-label.full     { background: var(--done-soft); color: var(--done); }
+
+  .layer-headline {
+    font-size: 1.04rem; font-weight: 600;
+    font-family: ui-sans-serif, system-ui, "Noto Sans KR", sans-serif;
+    line-height: 1.45;
+  }
+  .layer-body {
+    margin-top: 0.5rem; padding-top: 0.5rem;
+    border-top: 1px dashed var(--border);
+  }
+
+  /* 안내 멘트 박스 */
+  .guide {
+    background: var(--accent-soft);
+    border-radius: 10px;
+    padding: 0.7rem 0.9rem;
+    margin-top: 0.7rem;
+    font-size: 0.88rem;
+    font-family: ui-sans-serif, system-ui, "Noto Sans KR", sans-serif;
+    color: #7a3418;
+    display: flex; gap: 0.5rem; align-items: flex-start;
+  }
+
+  /* 선택 버튼 */
+  .choices {
+    display: flex; gap: 0.5rem; flex-wrap: wrap;
+    margin-top: 0.7rem;
+  }
+  .choice-btn {
+    font: inherit;
+    font-family: ui-sans-serif, system-ui, "Noto Sans KR", sans-serif;
+    font-size: 0.85rem; font-weight: 500;
+    padding: 0.5rem 0.9rem;
+    border-radius: 9px;
+    border: 1.5px solid var(--accent);
+    background: #fff; color: var(--accent);
+    cursor: pointer;
+    display: flex; align-items: center; gap: 0.4rem;
+  }
+  .choice-btn:hover { background: var(--accent-soft); }
+  .choice-btn.secondary { border-color: var(--border); color: var(--ink-2); }
+  .choice-btn.secondary:hover { background: var(--bg); }
+  .choice-btn:disabled { opacity: 0.4; cursor: default; }
+
+  /* 타이핑 인디케이터 */
+  .typing { display: flex; gap: 0.25rem; padding: 0.3rem 0; }
+  .typing span {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--ink-3);
+    animation: blink 1.2s infinite both;
+  }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+
+  /* 하단 입력 영역 */
+  .composer {
+    padding: 0.9rem 1.5rem 1.3rem;
+    border-top: 1px solid var(--border);
+  }
+  .composer-inner {
+    max-width: 660px; margin: 0 auto;
+    display: flex; gap: 0.6rem; align-items: center;
+  }
+  .composer input {
+    flex: 1;
+    font: inherit; font-size: 0.92rem;
+    font-family: ui-sans-serif, system-ui, "Noto Sans KR", sans-serif;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: #fff; color: var(--ink);
+  }
+  .composer input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .send-btn, .mic-btn {
+    font-size: 1rem;
+    width: 44px; height: 44px; flex-shrink: 0;
+    border-radius: 11px; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mic-btn { background: var(--accent-soft); color: var(--accent); }
+  .mic-btn:hover { background: #ecd5c6; }
+  .send-btn { background: var(--accent); color: #fff; }
+  .send-btn:hover { filter: brightness(1.08); }
+
+  .hint-row {
+    max-width: 660px; margin: 0.5rem auto 0;
+    font-size: 0.74rem; color: var(--ink-3);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    text-align: center;
+  }
+
+  .sim-note {
+    font-size: 0.72rem; color: var(--ink-3);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-style: italic;
+  }
+
+  @media (max-width: 720px) {
+    .sidebar { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ===== 왼쪽 사이드바 ===== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">◗</div>
+      <span class="brand-name">보이스 어시스턴트</span>
+    </div>
+
+    <button class="new-chat" id="new-chat">
+      <span aria-hidden="true">✎</span> 새 대화 시작
+    </button>
+
+    <div class="section-label">카테고리</div>
+    <div class="nav-item"><span class="ic" aria-hidden="true">▤</span> 전체 뉴스</div>
+    <div class="nav-item"><span class="ic" aria-hidden="true">▦</span> 경제</div>
+    <div class="nav-item"><span class="ic" aria-hidden="true">▣</span> 정치</div>
+    <div class="nav-item"><span class="ic" aria-hidden="true">▥</span> 사회</div>
+
+    <div class="section-label">최근 대화</div>
+    <div class="chat-item active"><span class="dot" aria-hidden="true"></span> 한국은행 기준금리 소식</div>
+    <div class="chat-item"><span class="dot" aria-hidden="true" style="background:#888"></span> 어제 본 정치 기사</div>
+    <div class="chat-item"><span class="dot" aria-hidden="true" style="background:#888"></span> 반도체 산업 동향</div>
+
+    <div class="sidebar-foot">
+      음성 우선 인터페이스 · 시뮬레이션
+    </div>
+  </aside>
+
+  <!-- ===== 오른쪽 대화 영역 ===== -->
+  <main class="main">
+    <header class="main-header">
+      <div>
+        <div class="main-title">한국은행 기준금리 소식</div>
+        <div class="main-sub">3계층 점진적 공개 시뮬레이션</div>
+      </div>
+      <div class="voice-badge" id="voice-badge">
+        <span class="pulse" aria-hidden="true"></span>
+        <span id="voice-badge-text">음성 대기 중</span>
+      </div>
+    </header>
+
+    <div class="conversation" id="conversation">
+      <div class="conversation-inner" id="conversation-inner">
+        <!-- 메시지가 여기에 쌓임 -->
+      </div>
+    </div>
+
+    <div class="composer">
+      <div class="composer-inner">
+        <button class="mic-btn" id="mic-btn" title="음성으로 질문" aria-label="음성으로 질문">🎙</button>
+        <input type="text" id="composer-input"
+               placeholder="질문을 입력하거나 마이크를 누르세요" />
+        <button class="send-btn" id="send-btn" aria-label="보내기">↑</button>
+      </div>
+      <p class="hint-row sim-note">
+        시뮬레이션 화면입니다. 예시 질문과 예시 기사로 3계층 점진적 공개를 보여줍니다.
+      </p>
+    </div>
+  </main>
+
+</div>
+
+<script>
+'use strict';
+
+/* ====== 예시 데이터: 3계층 구조 기사 ====== */
+var ARTICLE = {
+  headline: '한국은행, 기준금리 동결 결정',
+  summary: '한국은행 금융통화위원회가 기준금리를 현 수준에서 동결했습니다. '
+         + '물가 둔화세와 가계부채 부담을 함께 고려한 결정으로, 시장 예상과 부합했습니다.',
+  full: '한국은행 금융통화위원회는 오늘 회의에서 기준금리를 현 수준으로 '
+      + '유지하기로 만장일치 결정했습니다. 위원회는 소비자물가 상승률이 목표 범위에 '
+      + '근접하고 있으나, 가계부채 증가세와 환율 변동성을 감안할 때 신중한 기조가 '
+      + '필요하다고 설명했습니다. 한국은행 총재는 향후 통화정책을 물가와 금융안정 '
+      + '상황을 균형 있게 보며 결정하겠다고 밝혔습니다.'
+};
+
+var EXAMPLE_QUESTION = '한국은행 기준금리 소식 알려줘';
+var GUIDE_TEXT = '[헤드라인 읽기], [본문 자세히 읽기] 중 원하는 방법을 말해주세요.';
+
+/* ====== TTS ====== */
+var TTS = {
+  supported: 'speechSynthesis' in window,
+  rate: 0.95,
+  voice: null,
+  speak: function (text, onEnd) {
+    if (!this.supported) { if (onEnd) setTimeout(onEnd, 400); return; }
+    window.speechSynthesis.cancel();
+    var self = this;
+    setTimeout(function () {
+      var u = new SpeechSynthesisUtterance(text);
+      u.lang = 'ko-KR';
+      u.rate = self.rate;
+      if (self.voice) u.voice = self.voice;
+      u.onend = function () { setBadge(false); if (onEnd) onEnd(); };
+      u.onerror = function () { setBadge(false); if (onEnd) onEnd(); };
+      setBadge(true);
+      window.speechSynthesis.speak(u);
+    }, 120);
+  }
+};
+if (TTS.supported) {
+  var pickVoice = function () {
+    var ko = window.speechSynthesis.getVoices().filter(function (v) {
+      return v.lang && v.lang.toLowerCase().indexOf('ko') === 0;
+    });
+    if (ko.length) TTS.voice = ko[0];
+  };
+  pickVoice();
+  window.speechSynthesis.onvoiceschanged = pickVoice;
+}
+
+/* ====== 화면 헬퍼 ====== */
+var convo = document.getElementById('conversation-inner');
+var convoScroll = document.getElementById('conversation');
+
+function setBadge(speaking) {
+  var badge = document.getElementById('voice-badge');
+  var text = document.getElementById('voice-badge-text');
+  badge.classList.toggle('speaking', speaking);
+  text.textContent = speaking ? '음성 안내 중…' : '음성 대기 중';
+}
+
+function scrollDown() {
+  convoScroll.scrollTop = convoScroll.scrollHeight;
+}
+
+function addUserMessage(text) {
+  var msg = document.createElement('div');
+  msg.className = 'msg user';
+  msg.innerHTML = '<div class="avatar user" aria-hidden="true">나</div>'
+                + '<div class="bubble"></div>';
+  msg.querySelector('.bubble').textContent = text;
+  convo.appendChild(msg);
+  scrollDown();
+}
+
+/* AI 메시지 틀을 만들고 bubble 요소를 반환 */
+function addAiMessage() {
+  var msg = document.createElement('div');
+  msg.className = 'msg ai';
+  msg.innerHTML = '<div class="avatar ai" aria-hidden="true">◗</div>'
+                + '<div class="bubble"></div>';
+  convo.appendChild(msg);
+  scrollDown();
+  return msg.querySelector('.bubble');
+}
+
+/* 타이핑 인디케이터 표시 후, 잠시 뒤 콜백 */
+function showTyping(callback, delay) {
+  var bubble = addAiMessage();
+  bubble.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+  setTimeout(function () {
+    bubble.innerHTML = '';
+    callback(bubble);
+  }, delay || 1100);
+}
+
+/* ====== 3계층 공개 흐름 ====== */
+var flowState = { active: false };
+
+/* 1계층: 헤드라인 + 안내 멘트 + 선택 버튼 */
+function showHeadline() {
+  showTyping(function (bubble) {
+    bubble.innerHTML =
+      '<span class="layer-label headline">1계층 · 헤드라인</span>'
+      + '<div class="layer-headline"></div>'
+      + '<div class="guide"><span aria-hidden="true">🎧</span>'
+      + '<span class="guide-text"></span></div>'
+      + '<div class="choices"></div>';
+    bubble.querySelector('.layer-headline').textContent = ARTICLE.headline;
+    bubble.querySelector('.guide-text').textContent = GUIDE_TEXT;
+
+    var choices = bubble.querySelector('.choices');
+    var bHead = document.createElement('button');
+    bHead.className = 'choice-btn secondary';
+    bHead.innerHTML = '<span aria-hidden="true">📰</span> 헤드라인 읽기';
+    var bMore = document.createElement('button');
+    bMore.className = 'choice-btn';
+    bMore.innerHTML = '<span aria-hidden="true">📖</span> 본문 자세히 읽기';
+
+    bHead.addEventListener('click', function () {
+      lockChoices(bubble);
+      addUserMessage('헤드라인 읽기');
+      reReadHeadline();
+    });
+    bMore.addEventListener('click', function () {
+      lockChoices(bubble);
+      addUserMessage('본문 자세히 읽기');
+      showSummary();
+    });
+    choices.appendChild(bHead);
+    choices.appendChild(bMore);
+
+    scrollDown();
+    /* 헤드라인 + 안내 멘트를 음성으로 */
+    TTS.speak(ARTICLE.headline + '. ' + GUIDE_TEXT);
+  });
+}
+
+/* 헤드라인만 다시 읽기 선택 시 */
+function reReadHeadline() {
+  showTyping(function (bubble) {
+    bubble.innerHTML =
+      '<span class="layer-label headline">1계층 · 헤드라인</span>'
+      + '<div class="layer-headline"></div>'
+      + '<div class="guide"><span aria-hidden="true">🎧</span>'
+      + '<span class="guide-text"></span></div>'
+      + '<div class="choices"></div>';
+    bubble.querySelector('.layer-headline').textContent = ARTICLE.headline;
+    bubble.querySelector('.guide-text').textContent =
+      '헤드라인을 다시 읽었습니다. 본문을 자세히 들으려면 아래 버튼을 눌러주세요.';
+
+    var choices = bubble.querySelector('.choices');
+    var bMore = document.createElement('button');
+    bMore.className = 'choice-btn';
+    bMore.innerHTML = '<span aria-hidden="true">📖</span> 본문 자세히 읽기';
+    bMore.addEventListener('click', function () {
+      lockChoices(bubble);
+      addUserMessage('본문 자세히 읽기');
+      showSummary();
+    });
+    choices.appendChild(bMore);
+    scrollDown();
+    TTS.speak(ARTICLE.headline);
+  });
+}
+
+/* 2계층: 요약 + 다음 안내 */
+function showSummary() {
+  showTyping(function (bubble) {
+    bubble.innerHTML =
+      '<span class="layer-label summary">2계층 · 요약</span>'
+      + '<div class="layer-headline"></div>'
+      + '<div class="layer-body"></div>'
+      + '<div class="guide"><span aria-hidden="true">🎧</span>'
+      + '<span class="guide-text"></span></div>'
+      + '<div class="choices"></div>';
+    bubble.querySelector('.layer-headline').textContent = ARTICLE.headline;
+    bubble.querySelector('.layer-body').textContent = ARTICLE.summary;
+    bubble.querySelector('.guide-text').textContent =
+      '요약을 읽었습니다. [전문 읽기], [여기서 마치기] 중 원하는 방법을 말해주세요.';
+
+    var choices = bubble.querySelector('.choices');
+    var bFull = document.createElement('button');
+    bFull.className = 'choice-btn';
+    bFull.innerHTML = '<span aria-hidden="true">📄</span> 전문 읽기';
+    var bEnd = document.createElement('button');
+    bEnd.className = 'choice-btn secondary';
+    bEnd.innerHTML = '<span aria-hidden="true">✓</span> 여기서 마치기';
+
+    bFull.addEventListener('click', function () {
+      lockChoices(bubble);
+      addUserMessage('전문 읽기');
+      showFull();
+    });
+    bEnd.addEventListener('click', function () {
+      lockChoices(bubble);
+      addUserMessage('여기서 마치기');
+      finishFlow();
+    });
+    choices.appendChild(bFull);
+    choices.appendChild(bEnd);
+    scrollDown();
+    TTS.speak('요약입니다. ' + ARTICLE.summary
+      + ' 전문 읽기, 또는 여기서 마치기 중 원하는 방법을 말해주세요.');
+  });
+}
+
+/* 3계층: 전문 */
+function showFull() {
+  showTyping(function (bubble) {
+    bubble.innerHTML =
+      '<span class="layer-label full">3계층 · 전문</span>'
+      + '<div class="layer-headline"></div>'
+      + '<div class="layer-body"></div>'
+      + '<div class="guide"><span aria-hidden="true">🎧</span>'
+      + '<span class="guide-text"></span></div>'
+      + '<div class="choices"></div>';
+    bubble.querySelector('.layer-headline').textContent = ARTICLE.headline;
+    bubble.querySelector('.layer-body').textContent = ARTICLE.full;
+    bubble.querySelector('.guide-text').textContent =
+      '전문까지 모두 읽었습니다. 새 질문을 하려면 아래 버튼을 눌러주세요.';
+
+    var choices = bubble.querySelector('.choices');
+    var bNew = document.createElement('button');
+    bNew.className = 'choice-btn';
+    bNew.innerHTML = '<span aria-hidden="true">✎</span> 새 질문 하기';
+    bNew.addEventListener('click', function () {
+      lockChoices(bubble);
+      resetConversation();
+    });
+    choices.appendChild(bNew);
+    scrollDown();
+    TTS.speak('전문입니다. ' + ARTICLE.full);
+  });
+}
+
+/* '여기서 마치기' 선택 시 */
+function finishFlow() {
+  showTyping(function (bubble) {
+    bubble.innerHTML = '<div class="layer-headline" style="font-size:0.96rem;"></div>'
+      + '<div class="choices"></div>';
+    bubble.querySelector('.layer-headline').textContent =
+      '여기서 마칩니다. 다른 기사가 궁금하면 새 질문을 해주세요.';
+    var bNew = document.createElement('button');
+    bNew.className = 'choice-btn';
+    bNew.innerHTML = '<span aria-hidden="true">✎</span> 새 질문 하기';
+    bNew.addEventListener('click', function () { resetConversation(); });
+    bubble.querySelector('.choices').appendChild(bNew);
+    scrollDown();
+    TTS.speak('여기서 마칩니다. 다른 기사가 궁금하면 새 질문을 해주세요.');
+  });
+}
+
+/* 선택 버튼 잠그기 (한 번 고르면 비활성) */
+function lockChoices(bubble) {
+  var btns = bubble.querySelectorAll('.choice-btn');
+  for (var i = 0; i < btns.length; i++) btns[i].disabled = true;
+}
+
+/* ====== 대화 시작/초기화 ====== */
+function startFlow() {
+  addUserMessage(EXAMPLE_QUESTION);
+  showHeadline();
+}
+
+function resetConversation() {
+  if (TTS.supported) window.speechSynthesis.cancel();
+  setBadge(false);
+  convo.innerHTML = '';
+  var intro = addAiMessage();
+  intro.innerHTML = '<div class="layer-headline" style="font-size:0.96rem;"></div>'
+    + '<div class="sim-note" style="margin-top:0.4rem;"></div>';
+  intro.querySelector('.layer-headline').textContent =
+    '안녕하세요. 음성 우선 뉴스 어시스턴트입니다.';
+  intro.querySelector('.sim-note').textContent =
+    '아래에서 질문을 보내거나 마이크를 누르면, 기사를 3계층으로 나누어 단계별로 안내합니다.';
+}
+
+/* ====== 입력 처리 ====== */
+function handleSend() {
+  var input = document.getElementById('composer-input');
+  var text = input.value.trim();
+  input.value = '';
+  /* 시뮬레이션: 어떤 질문이든 예시 기사 흐름으로 응답 */
+  if (text) {
+    addUserMessage(text);
+    showHeadline();
+  } else {
+    startFlow();
+  }
+}
+
+document.getElementById('send-btn').addEventListener('click', handleSend);
+document.getElementById('composer-input').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') handleSend();
+});
+document.getElementById('mic-btn').addEventListener('click', function () {
+  /* 시뮬레이션: 마이크를 누르면 예시 질문이 들어온 것으로 처리 */
+  var input = document.getElementById('composer-input');
+  input.value = EXAMPLE_QUESTION;
+  setTimeout(handleSend, 300);
+});
+document.getElementById('new-chat').addEventListener('click', resetConversation);
+
+/* 첫 화면 */
+resetConversation();
+</script>
+
+</body>
+</html>
